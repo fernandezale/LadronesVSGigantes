@@ -3,17 +3,17 @@ He preparado un prototipo funcional en un solo archivo donde pueden jugar hasta 
 
 **¿Cómo jugar?**
 
-Haz clic en el botón de "Preview" (o "Vista Previa") para abrir el juego.
+* Haz clic en el botón de "Preview" (o "Vista Previa") para abrir el juego.
 
-Cada jugador usa un set de teclas en el mismo teclado para moverse:
+* Cada jugador usa un set de teclas en el mismo teclado para moverse:
 
-Jugador 1 (Azul): W A S D
-
-Jugador 2 (Rojo): Flechas de dirección
-
-Jugador 3 (Verde): I J K L
-
-Jugador 4 (Amarillo): T F G H
+  Jugador 1 (Azul): W A S D
+  
+  Jugador 2 (Rojo): Flechas de dirección
+  
+  Jugador 3 (Verde): I J K L
+  
+  Jugador 4 (Amarillo): T F G H
 
 * Salgan de la base verde, recojan los diamantes 💎 (solo pueden llevar uno a la vez) y vuelvan a la base para sumar un punto.
 
