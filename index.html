@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ladrones vs Gigante</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a202c; /* Tailwind gray-900 */
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #2d3748; /* Tailwind gray-800 */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 1rem;
+        }
+        .modal {
+            pointer-events: auto;
+            background: rgba(15, 23, 42, 0.9);
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border: 2px solid #3b82f6;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center h-screen relative">
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="flex justify-between items-start w-full max-w-6xl mx-auto">
+            <div class="bg-gray-800/80 p-4 rounded-lg border border-gray-600 shadow-lg">
+                <h1 class="text-2xl font-bold text-yellow-400 mb-2">💎 Botín: <span id="scoreDisplay">0</span> / 10</h1>
+                <p class="text-sm text-gray-300">Lleva los diamantes a la zona segura verde.</p>
+            </div>
+            <div class="bg-gray-800/80 p-4 rounded-lg border border-gray-600 shadow-lg text-sm text-right">
+                <h2 class="font-bold text-white mb-1">Controles (Teclado Compartido):</h2>
+                <p><span class="text-blue-400 font-bold">P1 (Azul):</span> W A S D</p>
+                <p><span class="text-red-400 font-bold">P2 (Rojo):</span> Flechas</p>
+                <p><span class="text-green-400 font-bold">P3 (Verde):</span> I J K L</p>
+                <p><span class="text-yellow-400 font-bold">P4 (Amarillo):</span> T F G H</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pantalla de Inicio / Fin -->
+    <div id="menuScreen" class="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-50">
+        <div class="modal max-w-md w-full">
+            <h1 id="menuTitle" class="text-4xl font-extrabold text-white mb-4">Ladrones vs Gigante</h1>
+            <p id="menuDesc" class="text-gray-300 mb-6">4 Ladrones. 1 Gigante furioso. Trabajen juntos para robar 10 diamantes sin ser aplastados.</p>
+            <button id="startBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-full transition-transform transform hover:scale-105 w-full">
+                Empezar Partida
+            </button>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const scoreDisplay = document.getElementById('scoreDisplay');
+            const menuScreen = document.getElementById('menuScreen');
+            const menuTitle = document.getElementById('menuTitle');
+            const menuDesc = document.getElementById('menuDesc');
+            const startBtn = document.getElementById('startBtn');
+
+            let animationId;
+            let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, WIN
+            let score = 0;
+            const targetScore = 10;
+
+            // Ajustar canvas
+            function resizeCanvas() {
+                const maxWidth = window.innerWidth - 40;
+                const maxHeight = window.innerHeight - 40;
+                // Mantener proporción 4:3
+                if (maxWidth / 4 < maxHeight / 3) {
+                    canvas.width = maxWidth;
+                    canvas.height = maxWidth * 0.75;
+                } else {
+                    canvas.height = maxHeight;
+                    canvas.width = maxHeight * 1.33;
+                }
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            // Teclado
+            const keys = {};
+            window.addEventListener('keydown', e => keys[e.code] = true);
+            window.addEventListener('keyup', e => keys[e.code] = false);
+
+            // Entidades
+            const base = {
+                x: 0, y: 0, width: 200, height: 200, color: 'rgba(34, 197, 94, 0.3)' // Zona segura
+            };
+
+            let players = [];
+            let giant = null;
+            let treasures = [];
+
+            class Player {
+                constructor(id, color, controls) {
+                    this.id = id;
+                    this.color = color;
+                    this.controls = controls;
+                    this.radius = canvas.width * 0.015;
+                    this.speed = canvas.width * 0.005;
+                    this.resetPosition();
+                    this.hasTreasure = false;
+                    this.isDead = false;
+                    this.respawnTimer = 0;
+                }
+
+                resetPosition() {
+                    this.x = base.width / 2 + (Math.random() * 40 - 20);
+                    this.y = base.height / 2 + (Math.random() * 40 - 20);
+                }
+
+                update() {
+                    if (this.isDead) {
+                        this.respawnTimer--;
+                        if (this.respawnTimer <= 0) {
+                            this.isDead = false;
+                            this.resetPosition();
+                        }
+                        return;
+                    }
+
+                    // Movimiento
+                    if (keys[this.controls.up]) this.y -= this.speed;
+                    if (keys[this.controls.down]) this.y += this.speed;
+                    if (keys[this.controls.left]) this.x -= this.speed;
+                    if (keys[this.controls.right]) this.x += this.speed;
+
+                    // Límites del mapa
+                    this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+                    this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+
+                    // Zona Segura: Dejar tesoro
+                    if (this.isInBase() && this.hasTreasure) {
+                        this.hasTreasure = false;
+                        score++;
+                        scoreDisplay.innerText = score;
+                        if (score >= targetScore) {
+                            endGame(true);
+                        }
+                    }
+                }
+
+                isInBase() {
+                    return this.x - this.radius > base.x && 
+                           this.x + this.radius < base.x + base.width &&
+                           this.y - this.radius > base.y && 
+                           this.y + this.radius < base.y + base.height;
+                }
+
+                draw() {
+                    if (this.isDead) {
+                        ctx.globalAlpha = 0.3;
+                        ctx.fillStyle = this.color;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.globalAlpha = 1.0;
+                        ctx.fillStyle = 'white';
+                        ctx.font = `${this.radius}px Arial`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('💀', this.x, this.y);
+                        return;
+                    }
+
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Dibujar emoji de ladrón
+                    ctx.font = `${this.radius * 1.2}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('🥷', this.x, this.y);
+
+                    // Indicador de tesoro
+                    if (this.hasTreasure) {
+                        ctx.fillText('💎', this.x, this.y - this.radius * 1.5);
+                    }
+                }
+            }
+
+            class Giant {
+                constructor() {
+                    this.radius = canvas.width * 0.05;
+                    this.x = canvas.width - this.radius * 2;
+                    this.y = canvas.height - this.radius * 2;
+                    this.speed = canvas.width * 0.0025;
+                    this.visionRadius = canvas.width * 0.25;
+                    this.targetX = this.x;
+                    this.targetY = this.y;
+                    this.state = 'PATROL'; // PATROL, CHASE
+                    this.waitTimer = 0;
+                }
+
+                update() {
+                    // Buscar ladrones
+                    let closestPlayer = null;
+                    let minDistance = this.visionRadius;
+
+                    for (let p of players) {
+                        if (p.isDead || p.isInBase()) continue; // Ignorar muertos y seguros
+                        
+                        const dx = p.x - this.x;
+                        const dy = p.y - this.y;
+                        const dist = Math.hypot(dx, dy);
+
+                        // Atacar si lo toca
+                        if (dist < this.radius + p.radius) {
+                            p.isDead = true;
+                            p.respawnTimer = 180; // 3 segundos a 60fps
+                            if (p.hasTreasure) {
+                                p.hasTreasure = false;
+                                treasures.push(new Treasure(p.x, p.y)); // Suelta el tesoro
+                            }
+                        }
+
+                        // Ver al jugador
+                        if (dist < minDistance) {
+                            minDistance = dist;
+                            closestPlayer = p;
+                        }
+                    }
+
+                    if (closestPlayer) {
+                        this.state = 'CHASE';
+                        this.targetX = closestPlayer.x;
+                        this.targetY = closestPlayer.y;
+                        // Acelerar un poco al perseguir
+                        this.speed = canvas.width * 0.0035;
+                    } else {
+                        this.state = 'PATROL';
+                        this.speed = canvas.width * 0.002;
+                        
+                        // Patrullaje aleatorio
+                        if (this.waitTimer > 0) {
+                            this.waitTimer--;
+                        } else {
+                            const dx = this.targetX - this.x;
+                            const dy = this.targetY - this.y;
+                            if (Math.hypot(dx, dy) < 10) {
+                                // Elegir nuevo punto
+                                this.targetX = base.width + Math.random() * (canvas.width - base.width);
+                                this.targetY = Math.random() * canvas.height;
+                                this.waitTimer = 60; // Esperar 1 segundo
+                            }
+                        }
+                    }
+
+                    // Moverse hacia el objetivo
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    
+                    if (dist > this.speed && this.waitTimer <= 0) {
+                        this.x += (dx / dist) * this.speed;
+                        this.y += (dy / dist) * this.speed;
+                    }
+                }
+
+                draw() {
+                    // Zona de visión
+                    ctx.fillStyle = this.state === 'CHASE' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(250, 204, 21, 0.1)';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.visionRadius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Cuerpo del gigante
+                    ctx.fillStyle = '#7f1d1d';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#450a0a';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+
+                    // Emoji
+                    ctx.font = `${this.radius * 1.5}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.state === 'CHASE' ? '👹' : '🧟‍♂️', this.x, this.y);
+                }
+            }
+
+            class Treasure {
+                constructor(x = null, y = null) {
+                    this.radius = canvas.width * 0.01;
+                    // Evitar que aparezca en la base
+                    if (x !== null && y !== null) {
+                        this.x = x;
+                        this.y = y;
+                    } else {
+                        this.x = base.width + this.radius * 2 + Math.random() * (canvas.width - base.width - this.radius * 4);
+                        this.y = this.radius * 2 + Math.random() * (canvas.height - this.radius * 4);
+                    }
+                    this.collected = false;
+                }
+
+                draw() {
+                    ctx.font = `${this.radius * 2.5}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('💎', this.x, this.y);
+                }
+            }
+
+            function initGame() {
+                score = 0;
+                scoreDisplay.innerText = score;
+                base.width = canvas.width * 0.2;
+                base.height = canvas.height * 0.3;
+
+                players = [
+                    new Player(1, '#3b82f6', { up: 'KeyW', left: 'KeyA', down: 'KeyS', right: 'KeyD' }),
+                    new Player(2, '#ef4444', { up: 'ArrowUp', left: 'ArrowLeft', down: 'ArrowDown', right: 'ArrowRight' }),
+                    new Player(3, '#22c55e', { up: 'KeyI', left: 'KeyJ', down: 'KeyK', right: 'KeyL' }),
+                    new Player(4, '#eab308', { up: 'KeyT', left: 'KeyF', down: 'KeyG', right: 'KeyH' })
+                ];
+
+                giant = new Giant();
+                
+                treasures = [];
+                for(let i=0; i < targetScore; i++) {
+                    treasures.push(new Treasure());
+                }
+
+                gameState = 'PLAYING';
+                menuScreen.classList.add('hidden');
+                
+                if(animationId) cancelAnimationFrame(animationId);
+                gameLoop();
+            }
+
+            function endGame(win) {
+                gameState = win ? 'WIN' : 'GAMEOVER';
+                menuScreen.classList.remove('hidden');
+                menuTitle.innerText = win ? '¡Gran Golpe!' : '¡Aplastados!';
+                menuTitle.className = win ? 'text-4xl font-extrabold text-green-400 mb-4' : 'text-4xl font-extrabold text-red-500 mb-4';
+                menuDesc.innerText = win ? `Robaron los ${targetScore} diamantes con éxito.` : 'El gigante atrapó a todos o fallaron en la misión.';
+                startBtn.innerText = 'Jugar de Nuevo';
+            }
+
+            startBtn.addEventListener('click', initGame);
+
+            function update() {
+                if (gameState !== 'PLAYING') return;
+
+                players.forEach(p => p.update());
+                giant.update();
+
+                // Colisiones Tesoros
+                for (let i = treasures.length - 1; i >= 0; i--) {
+                    const t = treasures[i];
+                    for (let p of players) {
+                        if (!p.isDead && !p.hasTreasure) {
+                            const dist = Math.hypot(p.x - t.x, p.y - t.y);
+                            if (dist < p.radius + t.radius * 2) {
+                                p.hasTreasure = true;
+                                treasures.splice(i, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Generar nuevos tesoros si faltan en el mapa (para mantener la cantidad)
+                const treasuresOnMapAndPlayers = treasures.length + players.filter(p => p.hasTreasure).length;
+                if (treasuresOnMapAndPlayers < targetScore - score && Math.random() < 0.01) {
+                    treasures.push(new Treasure());
+                }
+            }
+
+            function draw() {
+                // Fondo oscuro base
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Dibujar Zona Segura
+                ctx.fillStyle = base.color;
+                ctx.fillRect(base.x, base.y, base.width, base.height);
+                ctx.strokeStyle = '#22c55e';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(base.x, base.y, base.width, base.height);
+                
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText('🏕️ Zona Segura', base.x + 10, base.y + 10);
+
+                // Dibujar Entidades
+                treasures.forEach(t => t.draw());
+                players.forEach(p => p.draw());
+                giant.draw();
+            }
+
+            function gameLoop() {
+                update();
+                draw();
+                if (gameState === 'PLAYING') {
+                    animationId = requestAnimationFrame(gameLoop);
+                }
+            }
+        };
+    </script>
+</body>
+</html>
