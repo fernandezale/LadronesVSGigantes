@@ -18,3 +18,6 @@ He preparado un prototipo funcional en un solo archivo donde pueden jugar hasta 
 * Salgan de la base verde, recojan los diamantes 💎 (solo pueden llevar uno a la vez) y vuelvan a la base para sumar un punto.
 
 * ¡Cuidado con el Gigante! Si entran en su círculo amarillo los perseguirá. Si los toca, soltarán el diamante y volverán a la base penalizados por unos segundos.
+
+<img width="1146" height="842" alt="InicioScreenshot" src="https://github.com/user-attachments/assets/32c0c705-b28d-42ed-b3ec-9f14ec4d2cbe" />
+<img width="1192" height="894" alt="InGameScreenshot" src="https://github.com/user-attachments/assets/641fc085-7138-418d-9e28-fdcef6f93b51" />
